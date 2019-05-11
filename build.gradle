@@ -1,0 +1,69 @@
+plugins {
+  id 'java-library'
+  id 'groovy'
+  id 'jacoco'
+  id 'checkstyle'
+  id 'com.adarshr.test-logger' version '1.6.0'
+}
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+repositories {
+  mavenCentral()
+  mavenLocal()
+}
+
+dependencies {
+  annotationProcessor 'org.projectlombok:lombok:1.18.4'
+  compileOnly 'org.projectlombok:lombok:1.18.4'
+
+  // Test
+  testImplementation 'org.codehaus.groovy:groovy-all:2.5.6'
+  testImplementation 'org.spockframework:spock-core:1.2-groovy-2.5'
+  testAnnotationProcessor 'org.projectlombok:lombok:1.18.4'
+  testCompileOnly 'org.projectlombok:lombok:1.18.4'
+  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.1.1'
+  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.1.1'
+  testCompile 'org.skyscreamer:jsonassert:1.5.0'
+  testCompile 'org.mockito:mockito-core:2.23.4'
+}
+
+jar {
+  archiveBaseName = 'marqeta-webhooks-models'
+}
+
+test {
+  useJUnitPlatform()
+  exclude '**/*IntegrationTest*' // Exclude integration tests
+}
+
+task spockTest(type: Test, description: 'Runs tests written in Spock.', group: LifecycleBasePlugin.VERIFICATION_GROUP) {
+  useJUnit()
+}
+
+check.dependsOn spockTest
+
+ext {
+  jacocoMergedReport = file("$buildDir/jacoco/mergeTest.exec")
+}
+
+task jacocoMergeTestReport(type: JacocoMerge) {
+  executionData tasks.withType(Test)
+  destinationFile = jacocoMergedReport
+}
+
+jacocoTestReport {
+  dependsOn jacocoMergeTestReport
+  executionData jacocoMergedReport
+  reports {
+    xml.enabled true
+    csv.enabled false
+    html.enabled true
+    html.destination file("${buildDir}/reports/jacocoHtml")
+  }
+}
+
+// CHECKSTYLE
+checkstyleMain.source = "src/main/java"
+checkstyleTest.source = "src/test/java"
