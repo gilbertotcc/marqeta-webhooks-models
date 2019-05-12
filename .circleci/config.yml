@@ -51,9 +51,43 @@ jobs:
           path: build/libs/
           destination: jars
 
+  release:
+    docker:
+      - image: circleci/openjdk:11-jdk
+
+    working_directory: ~/repo
+
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "92:ab:f0:af:9c:6e:d6:95:d9:8f:ca:c1:74:5a:3c:84"
+
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "build.gradle" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run: git config --global user.email "${GIT_USER_EMAIL}"
+      - run: git config --global user.name "${GIT_USER_NAME}"
+      - run: gradle release -Prelease.useAutomaticVersion=true -i
+
+      - store_artifacts:
+          path: build/libs/
+          destination: jars
+
 workflows:
   version: 2
   test-build-release:
     jobs:
       - test
+      - release:
+          requires:
+            - test
+          filters:
+            branches:
+              only:
+                - master
 
