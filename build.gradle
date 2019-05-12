@@ -1,9 +1,15 @@
+import net.researchgate.release.cli.Executor
+
 plugins {
   id 'java-library'
   id 'groovy'
+  id 'maven'
   id 'jacoco'
   id 'checkstyle'
+  id 'com.jfrog.bintray' version '1.8.4'
+  id 'maven-publish'
   id 'com.adarshr.test-logger' version '1.6.0'
+  id 'net.researchgate.release' version '2.8.0'
 }
 
 sourceCompatibility = JavaVersion.VERSION_11
@@ -18,6 +24,14 @@ dependencies {
   annotationProcessor 'org.projectlombok:lombok:1.18.4'
   compileOnly 'org.projectlombok:lombok:1.18.4'
 
+  compile 'io.vavr:vavr:0.10.0'
+
+  compile 'com.fasterxml.jackson.core:jackson-core:2.9.8'
+  compile 'com.fasterxml.jackson.core:jackson-databind:2.9.8'
+  compile 'com.fasterxml.jackson.core:jackson-annotations:2.9.8'
+  compile 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.9.8'
+  compile 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.9.8'
+
   // Test
   testImplementation 'org.codehaus.groovy:groovy-all:2.5.6'
   testImplementation 'org.spockframework:spock-core:1.2-groovy-2.5'
@@ -26,23 +40,17 @@ dependencies {
   testImplementation 'org.junit.jupiter:junit-jupiter-api:5.1.1'
   testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.1.1'
   testCompile 'org.skyscreamer:jsonassert:1.5.0'
-  testCompile 'org.mockito:mockito-core:2.23.4'
 }
 
 jar {
   archiveBaseName = 'marqeta-webhooks-models'
 }
 
-test {
-  useJUnitPlatform()
-  exclude '**/*IntegrationTest*' // Exclude integration tests
-}
-
 task spockTest(type: Test, description: 'Runs tests written in Spock.', group: LifecycleBasePlugin.VERIFICATION_GROUP) {
   useJUnit()
 }
 
-check.dependsOn spockTest
+test.finalizedBy jacocoTestReport
 
 ext {
   jacocoMergedReport = file("$buildDir/jacoco/mergeTest.exec")
@@ -67,3 +75,56 @@ jacocoTestReport {
 // CHECKSTYLE
 checkstyleMain.source = "src/main/java"
 checkstyleTest.source = "src/test/java"
+
+ext {
+  testSources = 'src/test/groovy,src/test/java'
+  jacocoMergedReport = file("$buildDir/jacoco/mergeTest.exec")
+  generatedTestSourcesDir = 'generated-test-sources'
+}
+
+publishing {
+  publications {
+    maven(MavenPublication) {
+      from components.java
+    }
+  }
+}
+
+release {
+  preTagCommitMessage = '[Gradle Release Plugin] - pre tag commit [skip ci]: '
+  newVersionCommitMessage = '[Gradle Release Plugin] - new version commit [skip ci]: '
+}
+
+afterReleaseBuild.dependsOn bintrayUpload
+
+commitNewVersion {
+  doLast {
+    logger.info("Merging and pushing branch 'master' to 'develop' after release.")
+    def executor = new Executor(project.logger)
+    def workingDirectory = project.rootDir
+    def toBranch = 'develop'
+    executor.exec(['git', 'fetch'], directory: workingDirectory, errorPatterns: ['error: ', 'fatal: '])
+    executor.exec(['git', 'checkout', toBranch], directory: workingDirectory, errorPatterns: ['error: ', 'fatal: '])
+    executor.exec(['git', 'merge', '--no-ff', 'master'], directory: workingDirectory, errorPatterns: ['error: ', 'fatal: ', 'CONFLICT'])
+    executor.exec(['git', 'push', '--porcelain', 'origin', 'develop'], directory: workingDirectory, errorMessage: "Failed to push to 'develop' branch after 'master' was merged.", errorPatterns: ['[rejected]', 'error: ', 'fatal: '])
+    executor.exec(['git', 'checkout', 'master'], directory: workingDirectory, errorPatterns: ['error: ', 'fatal: '])
+  }
+}
+
+bintray {
+  user = System.getenv('BINTRAY_USERNAME')
+  key = System.getenv('BINTRAY_API_KEY')
+  publish = true
+  publications = ['maven']
+  pkg {
+    repo = 'marqeta'
+    name = 'marqeta-webhooks-models'
+    desc = 'Java library which models the event types sent by webhooks in the Marqeta platform'
+    licenses = ['MIT']
+    websiteUrl = 'https://github.com/gilbertotcc/marqeta-webhooks-models'
+    vcsUrl = 'https://github.com/gilbertotcc/marqeta-webhooks-models.git'
+    githubRepo = 'gilbertotcc/marqeta'
+    githubReleaseNotesFile = 'README.md'
+    issueTrackerUrl = 'https://github.com/gilbertotcc/marqeta-webhooks-models/issues'
+  }
+}
